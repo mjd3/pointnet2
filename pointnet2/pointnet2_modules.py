@@ -8,15 +8,16 @@ from typing import List
 
 
 class _PointnetSAModuleBase(nn.Module):
-
     def __init__(self):
         super().__init__()
         self.npoint = None
         self.groupers = None
         self.mlps = None
-        self.pool_method = 'max_pool'
+        self.pool_method = "max_pool"
 
-    def forward(self, xyz: torch.Tensor, features: torch.Tensor = None, new_xyz=None) -> (torch.Tensor, torch.Tensor):
+    def forward(
+        self, xyz: torch.Tensor, features: torch.Tensor = None, new_xyz=None
+    ) -> (torch.Tensor, torch.Tensor):
         """
         :param xyz: (B, N, 3) tensor of the xyz coordinates of the features
         :param features: (B, N, C) tensor of the descriptors of the the features
@@ -29,20 +30,30 @@ class _PointnetSAModuleBase(nn.Module):
 
         xyz_flipped = xyz.transpose(1, 2).contiguous()
         if new_xyz is None:
-            new_xyz = pointnet2_utils.gather_operation(
-                xyz_flipped,
-                pointnet2_utils.furthest_point_sample(xyz, self.npoint)
-            ).transpose(1, 2).contiguous() if self.npoint is not None else None
+            new_xyz = (
+                pointnet2_utils.gather_operation(
+                    xyz_flipped,
+                    pointnet2_utils.furthest_point_sample(xyz, self.npoint),
+                )
+                .transpose(1, 2)
+                .contiguous()
+                if self.npoint is not None
+                else None
+            )
 
         for i in range(len(self.groupers)):
-            new_features = self.groupers[i](xyz, new_xyz, features)  # (B, C, npoint, nsample)
+            new_features = self.groupers[i](
+                xyz, new_xyz, features
+            )  # (B, C, npoint, nsample)
 
-            new_features = self.mlps[i](new_features)  # (B, mlp[-1], npoint, nsample)
-            if self.pool_method == 'max_pool':
+            new_features = self.mlps[i](
+                new_features
+            )  # (B, mlp[-1], npoint, nsample)
+            if self.pool_method == "max_pool":
                 new_features = F.max_pool2d(
                     new_features, kernel_size=[1, new_features.size(3)]
                 )  # (B, mlp[-1], npoint, 1)
-            elif self.pool_method == 'avg_pool':
+            elif self.pool_method == "avg_pool":
                 new_features = F.avg_pool2d(
                     new_features, kernel_size=[1, new_features.size(3)]
                 )  # (B, mlp[-1], npoint, 1)
@@ -58,8 +69,20 @@ class _PointnetSAModuleBase(nn.Module):
 class PointnetSAModuleMSG(_PointnetSAModuleBase):
     """Pointnet set abstraction layer with multiscale grouping"""
 
-    def __init__(self, *, npoint: int, radii: List[float], nsamples: List[int], mlps: List[List[int]], bn: bool = True,
-                 use_xyz: bool = True, activation="relu", pool_method='max_pool', instance_norm=False, first=False):
+    def __init__(
+        self,
+        *,
+        npoint: int,
+        radii: List[float],
+        nsamples: List[int],
+        mlps: List[List[int]],
+        bn: bool = True,
+        use_xyz: bool = True,
+        activation="relu",
+        pool_method="max_pool",
+        instance_norm=False,
+        first=False
+    ):
         """
         :param npoint: int
         :param radii: list of float, list of radii to group with
@@ -82,21 +105,42 @@ class PointnetSAModuleMSG(_PointnetSAModuleBase):
             nsample = nsamples[i]
             self.groupers.append(
                 pointnet2_utils.QueryAndGroup(radius, nsample, use_xyz=use_xyz)
-                if npoint is not None else pointnet2_utils.GroupAll(use_xyz)
+                if npoint is not None
+                else pointnet2_utils.GroupAll(use_xyz)
             )
             mlp_spec = mlps[i]
             if use_xyz:
                 mlp_spec[0] += 3
 
-            self.mlps.append(pt_utils.SharedMLP(mlp_spec, bn=bn, activation=activation, instance_norm=instance_norm, first=first))
+            self.mlps.append(
+                pt_utils.SharedMLP(
+                    mlp_spec,
+                    bn=bn,
+                    activation=activation,
+                    instance_norm=instance_norm,
+                    first=first,
+                )
+            )
         self.pool_method = pool_method
 
 
 class PointnetSAModule(PointnetSAModuleMSG):
     """Pointnet set abstraction layer"""
 
-    def __init__(self, *, mlp: List[int], npoint: int = None, radius: float = None, nsample: int = None,
-                 bn: bool = True, use_xyz: bool = True, activation="relu", pool_method='max_pool', instance_norm=False, first=False):
+    def __init__(
+        self,
+        *,
+        mlp: List[int],
+        npoint: int = None,
+        radius: float = None,
+        nsample: int = None,
+        bn: bool = True,
+        use_xyz: bool = True,
+        activation="relu",
+        pool_method="max_pool",
+        instance_norm=False,
+        first=False
+    ):
         """
         :param mlp: list of int, spec of the pointnet before the global max_pool
         :param npoint: int, number of features
@@ -108,8 +152,15 @@ class PointnetSAModule(PointnetSAModuleMSG):
         :param instance_norm: whether to use instance_norm
         """
         super().__init__(
-            mlps=[mlp], npoint=npoint, radii=[radius], nsamples=[nsample], bn=bn, use_xyz=use_xyz,
-            activation=activation, pool_method=pool_method, instance_norm=instance_norm
+            mlps=[mlp],
+            npoint=npoint,
+            radii=[radius],
+            nsamples=[nsample],
+            bn=bn,
+            use_xyz=use_xyz,
+            activation=activation,
+            pool_method=pool_method,
+            instance_norm=instance_norm,
         )
 
 
@@ -125,7 +176,11 @@ class PointnetFPModule(nn.Module):
         self.mlp = pt_utils.SharedMLP(mlp, bn=bn)
 
     def forward(
-            self, unknown: torch.Tensor, known: torch.Tensor, unknow_feats: torch.Tensor, known_feats: torch.Tensor
+        self,
+        unknown: torch.Tensor,
+        known: torch.Tensor,
+        unknow_feats: torch.Tensor,
+        known_feats: torch.Tensor,
     ) -> torch.Tensor:
         """
         :param unknown: (B, n, 3) tensor of the xyz positions of the unknown features
@@ -141,12 +196,18 @@ class PointnetFPModule(nn.Module):
             norm = torch.sum(dist_recip, dim=2, keepdim=True)
             weight = dist_recip / norm
 
-            interpolated_feats = pointnet2_utils.three_interpolate(known_feats, idx, weight)
+            interpolated_feats = pointnet2_utils.three_interpolate(
+                known_feats, idx, weight
+            )
         else:
-            interpolated_feats = known_feats.expand(*known_feats.size()[0:2], unknown.size(1))
+            interpolated_feats = known_feats.expand(
+                *known_feats.size()[0:2], unknown.size(1)
+            )
 
         if unknow_feats is not None:
-            new_features = torch.cat([interpolated_feats, unknow_feats], dim=1)  # (B, C2 + C1, n)
+            new_features = torch.cat(
+                [interpolated_feats, unknow_feats], dim=1
+            )  # (B, C2 + C1, n)
         else:
             new_features = interpolated_feats
 
