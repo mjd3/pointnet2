@@ -25,9 +25,9 @@ int ball_query_wrapper_fast(int b, int n, int m, float radius, int nsample,
     const at::cuda::OptionalCUDAGuard device_guard(device_of(idx_tensor));
     CHECK_INPUT(new_xyz_tensor);
     CHECK_INPUT(xyz_tensor);
-    const float *new_xyz = new_xyz_tensor.data<float>();
-    const float *xyz = xyz_tensor.data<float>();
-    int *idx = idx_tensor.data<int>();
+    const float *new_xyz = new_xyz_tensor.data_ptr<float>();
+    const float *xyz = xyz_tensor.data_ptr<float>();
+    int *idx = idx_tensor.data_ptr<int>();
 
     cudaStream_t stream = at::cuda::getCurrentCUDAStream();
     ball_query_kernel_launcher_fast(b, n, m, radius, nsample, new_xyz, xyz, idx, stream);
