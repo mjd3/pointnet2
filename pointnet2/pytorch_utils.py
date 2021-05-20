@@ -1,7 +1,8 @@
 import math
+from typing import List, Tuple
+
 import torch
 import torch.nn as nn
-from typing import List, Tuple
 
 
 # sin activation
